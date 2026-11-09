@@ -1,0 +1,186 @@
+[package]
+name = "unpack"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+authors = ["The Atomdrift Project"]
+description = "Recovers the bytes a file hides: unpacked executables, decrypted payloads, installer contents and deobfuscated scripts. Never executes a sample."
+license = "Apache-2.0"
+repository = "https://github.com/atomdrift-project/unpack"
+keywords = ["unpacker", "malware-analysis", "deobfuscation", "forensics"]
+categories = ["command-line-utilities", "compression"]
+readme = "README.md"
+include = [
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/LICENSE",
+    "/README.md",
+    "/src/**",
+    "!/src/**/testdata/**",
+]
+
+[lib]
+name = "unpack"
+path = "src/lib.rs"
+
+[[bin]]
+name = "unpack"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[dependencies]
+aes = "0.9"
+aes-gcm = "0.10"
+aho-corasick = "1"
+base64 = "0.22"
+cbc = { version = "0.2", features = ["alloc"] }
+crc32fast = "1.5"
+data-encoding = { version = "2", optional = true }
+des = "0.8"
+chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["alloc"] }
+flate2 = "1.1"
+hex = "0.4"
+md-5 = "0.10.6"
+memchr = "2.8"
+regex = "1"
+scrypt = { version = "0.11", default-features = false, optional = true }
+serde_json = { version = "1", optional = true }
+sha2 = "0.11"
+# Structured diagnostics; the caller installs a subscriber.
+tracing = "0.1"
+# Script reconstructors (`script` feature) walk the caller's syntax tree, or
+# parse one themselves. Versions match filefacts', so a caller can hand over
+# the tree filefacts already built.
+tree-sitter = { version = "0.28", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+xz2 = "0.1"
+zstd = "0.14"
+
+[dev-dependencies]
+anyhow = "1"
+
+[features]
+# The `unpack` binary. A crate depending on the library sets
+# `default-features = false`.
+default = ["cli", "script"]
+cli = ["dep:serde_json"]
+# Reconstructors that read JavaScript and Python syntax trees.
+script = [
+    "dep:data-encoding",
+    "dep:scrypt",
+    "dep:serde_json",
+    "dep:tree-sitter",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-python",
+]
+
+# Lint profile: filefacts' (pedantic, no slice indexing, checked casts —
+# every method reads hostile bytes) merged with cleave's correctness denies.
+# The library has no filefacts or stng dependency, so stng can depend on it.
+[lints.rust]
+# No unsafe anywhere: a decoder that needs it is a decoder to rewrite.
+unsafe_code = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_must_use = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Parsers read untrusted bytes: index with `get`/`first_chunk`/`crate::bytes`,
+# never `buf[i]`, so a malformed file degrades instead of panicking. Test code
+# is exempt (see clippy.toml).
+indexing_slicing = "warn"
+#
+# Everything else in `pedantic` is on, including the cast lints: an `as` that
+# can truncate, wrap, or drop a sign on a file-supplied offset is how a
+# 64-bit length becomes a small, valid-looking one on a 32-bit host. Use
+# `crate::bytes::{sat_usize, sat_u32}`, `try_from`, `cast_signed`/
+# `cast_unsigned`, or a local `#[expect(.., reason = "..")]` where a cast is
+# provably in range. Test fixtures are exempt from the cast lints (see the
+# `cfg_attr(test, ..)` in lib.rs) since they build layouts from literals.
+#
+# The allows below are deliberate exceptions, each with its reason.
+#
+# --- Domain decisions ---
+# Metrics are intentionally f64. The precision boundary at 2^53 is an
+# accepted limit for forensic counts and sizes; values beyond that are
+# either pathological inputs or already-fatal earlier in the pipeline.
+cast_precision_loss = "allow"
+# Public-API friction without forensic benefit: every accessor would carry it.
+must_use_candidate = "allow"
+# Format parsers mirror on-disk flag sets field for field; packing them into
+# bitflags would obscure the spec mapping.
+struct_excessive_bools = "allow"
+# Single-byte counts run over short, bounded format tokens; the SIMD bytecount
+# crate is an unwarranted dependency for these tiny scans.
+naive_bytecount = "allow"
+# Lookup tables (opcode, machine, and tag maps) list each value even when two
+# map to the same arm; merging them would hide the spec's enumeration.
+match_same_arms = "allow"
+#
+# --- Stylistic: no defect class behind them ---
+# Format-conventional names (PE, ELF, DLL, etc.) get backticked when
+# they shouldn't have to be.
+doc_markdown = "allow"
+doc_overindented_list_items = "allow"
+# Extraction routines are linear walks; their line count tracks the
+# format's complexity, not architectural depth.
+too_many_lines = "allow"
+# Spec constants are written as the spec prints them.
+unreadable_literal = "allow"
+byte_char_slices = "allow"
+needless_raw_string_hashes = "allow"
+# Parsers bind fields in on-disk order next to where they are used.
+items_after_statements = "allow"
+many_single_char_names = "allow"
+struct_field_names = "allow"
+# Rewrites that read no better in format code.
+collapsible_if = "allow"
+single_match_else = "allow"
+manual_let_else = "allow"
+map_unwrap_or = "allow"
+redundant_closure_for_method_calls = "allow"
+semicolon_if_nothing_returned = "allow"
+uninlined_format_args = "allow"
+unnested_or_patterns = "allow"
+explicit_iter_loop = "allow"
+for_kv_map = "allow"
+field_reassign_with_default = "allow"
+needless_continue = "allow"
+bool_to_int_with_if = "allow"
+manual_range_contains = "allow"
+manual_abs_diff = "allow"
+manual_contains = "allow"
+manual_find = "allow"
+elidable_lifetime_names = "allow"
+unnecessary_trailing_comma = "allow"
+# Report builders format into one String; the allocation is not hot.
+format_push_string = "allow"
+format_collect = "allow"
+# Its suggested `assert_eq!(v, [] as [T; 0])` is noisier than the
+# `is_empty()` it replaces, and does not type-check against `&[Value]`.
+assert_is_empty = "allow"
+
+# From cleave's profile: library code never panics or leaves a stub.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unimplemented = "deny"
+todo = "deny"
+unreachable = "deny"
+dbg_macro = "deny"
+result_unit_err = "deny"
+result_large_err = "deny"
+map_err_ignore = "warn"
+
+
+[patch.crates-io]
+# tree-sitter carries an illumos build fix not yet released upstream; both
+# crates must come from the same fork because tree-sitter uses its in-tree
+# tree-sitter-language and Cargo links only one copy. Each root manifest
+# carries these patches because Cargo does not inherit dependency patches.
+tree-sitter = { git = "https://github.com/tstromberg/tree-sitter" }
+tree-sitter-language = { git = "https://github.com/tstromberg/tree-sitter" }

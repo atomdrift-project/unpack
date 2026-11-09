@@ -1,0 +1,5 @@
+# Test fixtures are trusted and small; indexing and unwrapping there is fine.
+allow-indexing-slicing-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
