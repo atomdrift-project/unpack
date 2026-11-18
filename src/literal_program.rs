@@ -1,6 +1,10 @@
 //! Bounded reconstruction of literal-only script recipes. No interpreter
 //! is invoked. Unknown writes, expressions, keys, or mismatched variables stop
 //! reconstruction; callers analyze recovered text as a separate source layer.
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, STANDARD_NO_PAD},
+};
 use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 
@@ -37,6 +41,17 @@ static JS_READ: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r#"^\s*([A-Za-z_$][\w$]*)\s*\[\s*("(?:\\.|[^"\\\r\n])*")\s*\]\s*"#).ok()
 });
 
+// A recipe can appear as source or inside a quoted configuration value.
+// Match the literal operand at the execution sink, not other Base64 in the file.
+static JS_REVERSED_BASE64: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"\b(?:new\s+Function|eval)\s*\(\s*(?:(?:window|globalThis)\s*\.\s*)?atob\s*\(\s*",
+        r#"(\\?["'])([A-Za-z0-9+/=]{8,})(\\?["'])\s*\.\s*split\s*\(\s*(?:\\?"\\?"|\\?'\\?')\s*\)"#,
+        r#"\s*\.\s*reverse\s*\(\s*\)\s*\.\s*join\s*\(\s*(?:\\?"\\?"|\\?'\\?')\s*\)\s*\)\s*\)"#,
+    ))
+    .ok()
+});
+
 static PS_RECIPE: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(concat!(
     r"(?i)\$(\w+)\s*=\s*(-?\d{1,12})\s*;\s*",
@@ -50,7 +65,7 @@ static PS_RECIPE: LazyLock<Option<Regex>> = LazyLock::new(|| {
 
 /// The layers literal-only recipes in `source` (at most 4 MiB) rebuild, at
 /// most 1 MiB in all: Python character arrays and the strings they write,
-/// JavaScript permutation and Packer layers and string-table `eval`s, and
+/// JavaScript permutation, Packer, reversed Base64 and string-table layers, and
 /// PowerShell offset-`[char]` loops.
 #[must_use]
 pub fn decode(source: &str) -> Vec<Layer> {
@@ -80,6 +95,40 @@ pub fn decode(source: &str) -> Vec<Layer> {
     }
     if let Some(decoded) = crate::js_decimal_packer::decode(source) {
         push(&mut budget, 0, decoded, Some(Language::JavaScript));
+    }
+    if source.contains("atob")
+        && source.contains("reverse")
+        && let Some(recipes) = JS_REVERSED_BASE64.as_ref()
+    {
+        for recipe in recipes.captures_iter(source).take(64) {
+            let (Some(open), Some(encoded), Some(close)) =
+                (recipe.get(1), recipe.get(2), recipe.get(3))
+            else {
+                continue;
+            };
+            if open.as_str() != close.as_str() || encoded.len() > budget.saturating_mul(2) {
+                continue;
+            }
+            let input: Vec<_> = encoded.as_str().bytes().rev().collect();
+            let decoder = if input.ends_with(b"=") {
+                &STANDARD
+            } else {
+                &STANDARD_NO_PAD
+            };
+            if let Some(text) = decoder
+                .decode(input)
+                .ok()
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                && !text.contains('\0')
+            {
+                push(
+                    &mut budget,
+                    encoded.start(),
+                    text,
+                    Some(Language::JavaScript),
+                );
+            }
+        }
     }
     if source.contains("eval")
         && let Some(js_start) = JS_START.as_ref()
@@ -236,6 +285,37 @@ mod tests {
             assert_eq!(decode(&s)[0].text, "var x = 1; alert(x);");
         }
     }
+    #[test]
+    fn recovers_reversed_base64_at_execution_sinks() {
+        let program = "console.log('decoder fixture');";
+        for encoder in [&STANDARD, &STANDARD_NO_PAD] {
+            let encoded: String = encoder.encode(program).chars().rev().collect();
+            let raw = format!(r#"new Function(atob("{encoded}".split("").reverse().join("")))"#);
+            let quoted = serde_json::to_string(&raw).expect("encode carrier");
+            let eval = format!(r"eval(window.atob('{encoded}'.split('').reverse().join('')))");
+            let source = format!("{raw};\nconst staged = {quoted};\n{eval};");
+            let layers = decode(&source);
+            assert_eq!(layers.len(), 3);
+            for layer in layers {
+                assert_eq!(layer.text, program);
+                assert_eq!(layer.language, Some(Language::JavaScript));
+                assert!(source[layer.offset..].starts_with(&encoded));
+            }
+        }
+    }
+
+    #[test]
+    fn reversed_base64_requires_literal_execution_recipe() {
+        for source in [
+            r#"atob("7ISZpJXZgkSZyV3c".split("").reverse().join(""))"#,
+            r#"eval(atob(value.split("").reverse().join("")))"#,
+            r#"eval(atob("invalid===z".split("").reverse().join("")))"#,
+            r#"eval(atob("7ISZpJXZgkSZyV3c".split("").join("")))"#,
+        ] {
+            assert!(decode(source).is_empty(), "{source}");
+        }
+    }
+
     #[test]
     fn table_rejects_dynamic_unresolved_and_mutated_inputs() {
         for s in [
