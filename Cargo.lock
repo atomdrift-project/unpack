@@ -113,9 +113,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.11.2"
+version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ef9e3e8154a45c7a95cff4c1299702106ad94062d7bb85fdc5d3a5afd91d45"
+checksum = "02f0e023adb368345ce0ca6cdfc0f24a06554468d0e8503e14a0841de79bfa69"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -464,9 +464,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.17"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+checksum = "c938015719552d665fd0553b90d96cd7ff58e83e4c061ca99e6bb78865a72752"
 
 [[package]]
 name = "pkg-config"
@@ -556,8 +556,7 @@ dependencies = [
 [[package]]
 name = "regex-syntax"
 version = "0.8.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6"
+source = "git+https://github.com/tstromberg/regex#16bee32d661786cdb78dd8dc167fcdacadf4d563"
 
 [[package]]
 name = "salsa20"
@@ -723,7 +722,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter"
 version = "0.28.0"
-source = "git+https://github.com/tstromberg/tree-sitter#6fc53391cada7860dfec2f5788602500ac06c475"
+source = "git+https://github.com/tstromberg/tree-sitter#c6a0d9ee7d699d570deec5d16a8ab1387a23ec7a"
 dependencies = [
  "cc",
  "regex",
@@ -744,7 +743,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-language"
 version = "0.1.8"
-source = "git+https://github.com/tstromberg/tree-sitter#6fc53391cada7860dfec2f5788602500ac06c475"
+source = "git+https://github.com/tstromberg/tree-sitter#c6a0d9ee7d699d570deec5d16a8ab1387a23ec7a"
 
 [[package]]
 name = "tree-sitter-python"

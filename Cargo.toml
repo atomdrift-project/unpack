@@ -178,6 +178,8 @@ map_err_ignore = "warn"
 
 
 [patch.crates-io]
+# Inherited from a sibling by update-deps: [patch] applies only in the root.
+regex-syntax = { git = "https://github.com/tstromberg/regex" }
 # tree-sitter carries an illumos build fix not yet released upstream; both
 # crates must come from the same fork because tree-sitter uses its in-tree
 # tree-sitter-language and Cargo links only one copy. Each root manifest
