@@ -46,6 +46,7 @@ macro_rules! static_regex {
 }
 
 pub mod aes_payload;
+pub mod base85;
 pub mod batch_self_hex;
 pub mod cfml;
 pub mod dos_word_xor;
@@ -85,6 +86,7 @@ pub mod pyinstaller;
 pub mod python_char_array;
 #[cfg(feature = "script")]
 pub mod python_encoded_command;
+pub mod python_keyed_armor;
 pub mod rc4_pe_table;
 #[cfg(feature = "script")]
 mod script;
